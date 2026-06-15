@@ -1,0 +1,930 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Snake Game</title>
+  <style>
+    *, *::before, *::after {
+      box-sizing: border-box; margin: 0; padding: 0;
+      user-select: none; -webkit-tap-highlight-color: transparent;
+    }
+    body {
+      min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      font-family: system-ui, -apple-system, sans-serif;
+      color: #fff; background-color: #4a7c2c; padding: 10px; overflow: hidden;
+    }
+    #game-wrap {
+      width: 100%; max-width: 500px; display: flex; flex-direction: column;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.3); border-radius: 12px;
+      overflow: hidden; background: #4a752c;
+    }
+    #hud {
+      display: flex; justify-content: space-between; align-items: center;
+      background: #4a752c; padding: 7px 10px;
+      border-bottom: 2px solid #3e6225; gap: 4px;
+      min-height: 46px; overflow: hidden;
+    }
+    .hud-stats { display: flex; gap: 6px; align-items: center; flex-shrink: 0; min-width: 0; }
+    .badge {
+      font-size: clamp(11px, 3.2vw, 16px);
+      font-weight: bold; display: flex; align-items: center; gap: 3px;
+      white-space: nowrap;
+    }
+    #time-badge {
+      font-size: clamp(11px, 3vw, 15px);
+      white-space: nowrap; flex-shrink: 0; text-align: center;
+    }
+    #pause-btn {
+      background: rgba(255,255,255,0.15); border: 2px solid rgba(255,255,255,0.35);
+      border-radius: 8px; color: #fff; font-size: 15px;
+      width: 34px; height: 34px; min-width: 34px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; transition: background 0.15s, transform 0.1s; flex-shrink: 0;
+    }
+    #pause-btn:active { background: rgba(255,255,255,0.3); transform: scale(0.93); }
+    #pause-btn.hidden { opacity: 0; pointer-events: none; }
+
+    #canvas-shell { position: relative; width: 100%; }
+    canvas { display: block; width: 100%; height: auto; aspect-ratio: 1/1; background-color: #aad751; }
+
+    .overlay {
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      display: flex; align-items: center; justify-content: center;
+      padding: 20px; z-index: 10; transition: opacity 0.2s, visibility 0.2s;
+    }
+    .overlay.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+
+    /* ── START MENU ── */
+    #menu-overlay { background: rgba(0,0,0,0.4); }
+    .menu-box {
+      width: 100%; max-width: 320px; background: #74c4fc;
+      border-radius: 12px; padding: 20px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+      display: flex; flex-direction: column; gap: 14px;
+    }
+    .control-group { display: flex; flex-direction: column; gap: 4px; }
+    .control-group label { font-size: 12px; font-weight: bold; text-transform: uppercase; color: #fff; }
+    .control-group select {
+      padding: 8px; border-radius: 6px;
+      background: rgba(255,255,255,0.25); border: 1px solid rgba(255,255,255,0.4);
+      color: #fff; font-size: 14px; font-weight: bold; outline: none; cursor: pointer;
+    }
+    .control-group select option { background: #74c4fc; color: #fff; }
+    .play-btn {
+      margin-top: 6px; border: 0; border-radius: 6px; padding: 12px;
+      font-size: 18px; font-weight: bold; color: #fff; background: #1971c2;
+      cursor: pointer; box-shadow: 0 4px 0 #11508b;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+    }
+    .play-btn:active { transform: translateY(2px); box-shadow: 0 2px 0 #11508b; }
+
+    /* ── PAUSE ── */
+    #pause-overlay { background: rgba(0,0,0,0.55); }
+    .pause-box {
+      background: rgba(30,30,30,0.92); border: 2px solid rgba(255,255,255,0.15);
+      border-radius: 16px; padding: 32px 40px;
+      display: flex; flex-direction: column; align-items: center; gap: 20px;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+    }
+    .pause-icon { font-size: 48px; line-height: 1; }
+    .pause-title { font-size: 26px; font-weight: 800; letter-spacing: 2px; color: #fff; }
+    .pause-hint { font-size: 13px; color: rgba(255,255,255,0.55); text-align: center; }
+    .resume-btn {
+      border: 0; border-radius: 8px; padding: 12px 32px;
+      font-size: 17px; font-weight: bold; color: #fff; background: #2f9e44;
+      cursor: pointer; box-shadow: 0 4px 0 #1f6b2e;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .resume-btn:active { transform: translateY(2px); box-shadow: 0 2px 0 #1f6b2e; }
+
+    /* ── GAME OVER SCREEN ── */
+    #gameover-overlay {
+      background: rgba(0,0,0,0.72);
+      align-items: flex-start;
+      overflow-y: auto;
+      padding: 12px 16px;
+    }
+    .gameover-box {
+      width: 100%; max-width: 340px; margin: auto;
+      background: linear-gradient(160deg, #1a1a2e 0%, #16213e 60%, #0f3460 100%);
+      border: 2px solid rgba(255,255,255,0.12); border-radius: 18px; padding: 16px 16px 14px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+      display: flex; flex-direction: column; align-items: center; gap: 10px;
+      animation: goSlideIn 0.35s cubic-bezier(0.34,1.56,0.64,1);
+    }
+    @keyframes goSlideIn {
+      from { transform: scale(0.7) translateY(30px); opacity: 0; }
+      to   { transform: scale(1) translateY(0);      opacity: 1; }
+    }
+    .go-skull { font-size: 42px; line-height: 1; animation: goShake 0.5s ease 0.1s; }
+    @keyframes goShake {
+      0%,100% { transform: rotate(0deg); }
+      20% { transform: rotate(-12deg); } 40% { transform: rotate(12deg); }
+      60% { transform: rotate(-8deg); }  80% { transform: rotate(8deg); }
+    }
+    .go-title {
+      font-size: clamp(20px, 6vw, 28px); font-weight: 900; letter-spacing: 3px;
+      background: linear-gradient(90deg, #ff6b6b, #ffd93d, #6bcb77, #4d96ff);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .go-stats-grid {
+      width: 100%; display: grid; grid-template-columns: 1fr 1fr;
+      gap: 6px; margin: 2px 0;
+    }
+    .go-stat {
+      background: rgba(255,255,255,0.07); border-radius: 10px; padding: 8px 6px;
+      text-align: center; border: 1px solid rgba(255,255,255,0.1);
+    }
+    .go-stat-val { font-size: clamp(18px, 5vw, 22px); font-weight: 800; color: #ffd93d; }
+    .go-stat-lbl { font-size: 10px; font-weight: 600; text-transform: uppercase; color: rgba(255,255,255,0.5); margin-top: 2px; }
+    .go-new-best {
+      font-size: 11px; font-weight: 700; color: #ffd93d;
+      text-transform: uppercase; letter-spacing: 1px;
+      background: rgba(255,217,61,0.15); border-radius: 6px; padding: 4px 10px;
+      display: none;
+    }
+    .go-new-best.show { display: block; animation: goPulse 0.6s ease; }
+    @keyframes goPulse {
+      0%,100% { transform: scale(1); } 50% { transform: scale(1.1); }
+    }
+
+    /* Achievements in game-over */
+    .go-achievements-title {
+      font-size: 11px; font-weight: 700; text-transform: uppercase;
+      color: rgba(255,255,255,0.45); letter-spacing: 1px; align-self: flex-start;
+    }
+    .go-achievements-list {
+      width: 100%; display: flex; flex-direction: column; gap: 5px; max-height: 110px;
+      overflow-y: auto; padding-right: 2px;
+    }
+    .go-achievements-list::-webkit-scrollbar { width: 4px; }
+    .go-achievements-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 2px; }
+    .go-ach-row {
+      display: flex; align-items: center; gap: 8px;
+      background: rgba(255,255,255,0.06); border-radius: 8px; padding: 7px 10px;
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+    .go-ach-icon { font-size: 18px; flex-shrink: 0; }
+    .go-ach-info { flex: 1; }
+    .go-ach-name { font-size: 13px; font-weight: 700; color: #fff; }
+    .go-ach-desc { font-size: 10px; color: rgba(255,255,255,0.5); }
+    .go-ach-new { font-size: 10px; font-weight: 700; color: #6bcb77; }
+    .go-no-ach { font-size: 12px; color: rgba(255,255,255,0.35); text-align: center; padding: 8px; }
+
+    .go-btn-row { display: flex; gap: 8px; width: 100%; margin-top: 2px; }
+    .go-btn {
+      flex: 1; border: 0; border-radius: 10px; padding: 13px;
+      font-size: 15px; font-weight: 700; color: #fff; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+    }
+    .go-btn-play  { background: #2f9e44; box-shadow: 0 4px 0 #1f6b2e; }
+    .go-btn-play:active  { transform: translateY(2px); box-shadow: 0 2px 0 #1f6b2e; }
+    .go-btn-menu  { background: #1971c2; box-shadow: 0 4px 0 #11508b; }
+    .go-btn-menu:active  { transform: translateY(2px); box-shadow: 0 2px 0 #11508b; }
+
+    /* ── ACHIEVEMENT TOAST ── */
+    #toast-container {
+      position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
+      width: calc(100% - 24px); max-width: 360px;
+      display: flex; flex-direction: column; gap: 6px;
+      pointer-events: none; z-index: 50;
+    }
+    .ach-toast {
+      background: linear-gradient(135deg, rgba(20,20,40,0.97), rgba(40,40,80,0.97));
+      border: 1.5px solid rgba(255,255,255,0.18); border-radius: 10px;
+      padding: 10px 14px; display: flex; align-items: center; gap: 10px;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.4);
+      animation: toastIn 0.4s cubic-bezier(0.34,1.56,0.64,1);
+    }
+    .ach-toast.out { animation: toastOut 0.3s ease forwards; }
+    @keyframes toastIn  { from { transform: translateY(-20px) scale(0.85); opacity: 0; } to { transform: translateY(0) scale(1); opacity: 1; } }
+    @keyframes toastOut { to   { transform: translateY(-10px) scale(0.9); opacity: 0; } }
+    .toast-icon  { font-size: 22px; flex-shrink: 0; }
+    .toast-text  { flex: 1; }
+    .toast-label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #ffd93d; }
+    .toast-name  { font-size: 13px; font-weight: 700; color: #fff; }
+    .toast-desc  { font-size: 10px; color: rgba(255,255,255,0.55); }
+
+    /* ── CONTROLS PANEL ── */
+    #controls-panel {
+      background: #3e6225; border-top: 2px solid #2e4a1a;
+      padding: 10px 16px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    #controls-hints {
+      display: flex; flex-direction: row; align-items: center;
+      justify-content: center; gap: 10px; flex-wrap: wrap;
+    }
+    .hint-label {
+      font-size: 11px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.5px; color: rgba(255,255,255,0.5); text-align: center;
+    }
+    .hint-sep { color: rgba(255,255,255,0.25); font-size: 13px; }
+  </style>
+</head>
+<body>
+<div id="game-wrap">
+
+  <div id="hud">
+    <div class="hud-stats">
+      <span class="badge">Score: <span id="score">0</span></span>
+      <span class="badge">Best: <span id="best">0</span></span>
+    </div>
+    <span class="badge" id="time-badge">⏱️ 00:00</span>
+    <button id="pause-btn" class="hidden" title="Pause (P)">⏸</button>
+  </div>
+
+  <div id="canvas-shell">
+    <canvas id="canvas" width="540" height="540"></canvas>
+
+    <!-- Toast container (inside canvas-shell so z-index stacks properly) -->
+    <div id="toast-container"></div>
+
+    <!-- Start menu -->
+    <div id="menu-overlay" class="overlay">
+      <div class="menu-box">
+        <div class="control-group">
+          <label for="select-food">Food Type</label>
+          <select id="select-food">
+            <option value="apple">🍎 Apple</option>
+            <option value="broccoli">🥦 Broccoli</option>
+            <option value="watermelon">🍉 Watermelon</option>
+            <option value="bowl">🥣 Fruit Bowl</option>
+          </select>
+        </div>
+        <div class="control-group">
+          <label for="select-speed">Game Mode (Difficulty)</label>
+          <select id="select-speed">
+            <option value="easy">🐢 Easy</option>
+            <option value="normal" selected>🦝 Normal</option>
+            <option value="hard">🦘 Hard</option>
+            <option value="hell">😈 Hell</option>
+          </select>
+        </div>
+        <div class="control-group">
+          <label for="select-walls">Wall Collision</label>
+          <select id="select-walls">
+            <option value="on" selected>🧱 On — Walls Kill</option>
+            <option value="off">🌀 Off — Wrap Through</option>
+          </select>
+        </div>
+        <div class="control-group">
+          <label for="select-skin">Snake Skin</label>
+          <select id="select-skin">
+            <option value="classic">Classic Green</option>
+            <option value="neon">Neon Cyan</option>
+            <option value="sunset">Sunset Orange</option>
+            <option value="royal">Royal Purple</option>
+          </select>
+        </div>
+        <button class="play-btn" id="start-btn">▶ Play</button>
+      </div>
+    </div>
+
+    <!-- Pause overlay -->
+    <div id="pause-overlay" class="overlay hidden">
+      <div class="pause-box">
+        <div class="pause-icon">⏸️</div>
+        <div class="pause-title">PAUSED</div>
+        <div class="pause-hint">Press <strong>P</strong> or tap Resume</div>
+        <button class="resume-btn" id="resume-btn">▶ Resume</button>
+      </div>
+    </div>
+
+    <!-- Game Over screen -->
+    <div id="gameover-overlay" class="overlay hidden">
+      <div class="gameover-box">
+        <div class="go-skull">💀</div>
+        <div class="go-title">GAME OVER</div>
+        <div class="go-new-best" id="go-new-best">🏆 New Best Score!</div>
+        <div class="go-stats-grid">
+          <div class="go-stat">
+            <div class="go-stat-val" id="go-score">0</div>
+            <div class="go-stat-lbl">Score</div>
+          </div>
+          <div class="go-stat">
+            <div class="go-stat-val" id="go-best">0</div>
+            <div class="go-stat-lbl">Best</div>
+          </div>
+          <div class="go-stat">
+            <div class="go-stat-val" id="go-length">0</div>
+            <div class="go-stat-lbl">Length</div>
+          </div>
+          <div class="go-stat">
+            <div class="go-stat-val" id="go-time">00:00</div>
+            <div class="go-stat-lbl">Time</div>
+          </div>
+        </div>
+        <div class="go-achievements-title">Achievements This Run</div>
+        <div class="go-achievements-list" id="go-ach-list"></div>
+        <div class="go-btn-row">
+          <button class="go-btn go-btn-play" id="go-play-btn">▶ Play Again</button>
+          <button class="go-btn go-btn-menu" id="go-menu-btn">☰ Menu</button>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /canvas-shell -->
+
+  <!-- Controls -->
+  <div id="controls-panel">
+    <div id="controls-hints">
+      <span class="hint-label">📱 Swipe to move</span>
+      <span class="hint-sep">·</span>
+      <span class="hint-label">⌨️ WASD / Arrow keys</span>
+      <span class="hint-sep">·</span>
+      <span class="hint-label">P to Pause</span>
+    </div>
+  </div>
+
+</div><!-- /game-wrap -->
+
+<script>
+// ─────────────────────────────────────────────
+//  CANVAS SETUP
+// ─────────────────────────────────────────────
+const canvas = document.getElementById('canvas');
+const ctx    = canvas.getContext('2d');
+const COLS = 17, ROWS = 17;
+const CELL = canvas.width / COLS;
+
+// ─────────────────────────────────────────────
+//  SETTINGS
+// ─────────────────────────────────────────────
+const SPEEDS = { easy: 180, normal: 130, hard: 85, hell: 50 };
+let SKIN   = { head: '#16705A', body: '#3FAE7B', tail: '#9FE1CB' };
+let FOOD   = { emoji: '🍎' };
+let WALLS_ON = true;
+
+// ─────────────────────────────────────────────
+//  ACHIEVEMENTS DEFINITION
+// ─────────────────────────────────────────────
+const ACHIEVEMENTS = [
+  { id: 'first_bite',  icon: '🍽️',  name: 'First Bite',      desc: 'Eat your first food',           check: s => s.foodEaten >= 1 },
+  { id: 'hungry',      icon: '🥴',  name: 'Hungry Snake',    desc: 'Eat 5 foods in one run',        check: s => s.foodEaten >= 5 },
+  { id: 'glutton',     icon: '🤤',  name: 'Absolute Glutton',desc: 'Eat 15 foods in one run',       check: s => s.foodEaten >= 15 },
+  { id: 'star_catcher',icon: '⭐', name: 'Star Catcher',    desc: 'Collect a bonus star',          check: s => s.starsEaten >= 1 },
+  { id: 'star_hunter', icon: '🌟', name: 'Star Hunter',     desc: 'Collect 3 bonus stars',         check: s => s.starsEaten >= 3 },
+  { id: 'score_50',    icon: '🏅',  name: 'Half Century',    desc: 'Reach a score of 50',           check: s => s.score >= 50 },
+  { id: 'score_100',   icon: '🎖️', name: 'Century Club',    desc: 'Reach a score of 100',          check: s => s.score >= 100 },
+  { id: 'score_200',   icon: '🏆',  name: 'Legend',          desc: 'Reach a score of 200',          check: s => s.score >= 200 },
+  { id: 'long_snake',  icon: '🐍',  name: 'Long Boi',        desc: 'Grow to length 10',             check: s => s.snake.length >= 10 },
+  { id: 'massive',     icon: '🦕',  name: 'Massive Serpent', desc: 'Grow to length 20',             check: s => s.snake.length >= 20 },
+  { id: 'speedrun',    icon: '⚡',  name: 'Speedrunner',     desc: 'Score 50+ in under 30 seconds', check: s => s.score >= 50 && s.elapsedSeconds <= 30 },
+  { id: 'survivor',    icon: '🛡️', name: 'Survivor',        desc: 'Survive for 2 minutes',         check: s => s.elapsedSeconds >= 120 },
+  { id: 'hell_mode',   icon: '😈',  name: 'Hellraiser',      desc: 'Score 50 in Hell mode',         check: s => s.difficulty === 'hell' && s.score >= 50 },
+];
+
+// Per-session achieved set (so we only toast each one once per run)
+let sessionAchieved = new Set();
+// All-time unlocked (persisted in memory across games in one session)
+let allTimeUnlocked = new Set();
+
+// ─────────────────────────────────────────────
+//  GAME STATE
+// ─────────────────────────────────────────────
+const state = {
+  snake: [], dir: { x:1,y:0 }, nextDir: { x:1,y:0 },
+  food: null, bonus: null, bonusTimer: 0, obstacles: [],
+  score: 0, best: 0, currentSpeed: 130, difficulty: 'normal',
+  running: false, paused: false,
+  rafId: null, playTimer: null,
+  startTimeMs: 0, pausedElapsedMs: 0, pauseStartMs: 0,
+  // smooth animation
+  lerpT: 0, prevSnake: [], prevDir: { x:1,y:0 },
+  lastStepMs: 0,
+  // stats for achievements
+  foodEaten: 0, starsEaten: 0, elapsedSeconds: 0,
+  newBestThisRun: false,
+};
+
+// ─────────────────────────────────────────────
+//  AUDIO
+// ─────────────────────────────────────────────
+let audioCtx = null;
+function initAudio() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+}
+function playTone(type) {
+  if (!audioCtx) return;
+  const now = audioCtx.currentTime;
+  const mk = (type, freq0, freq1, dur, gainPeak, waveform='sine') => {
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.connect(g); g.connect(audioCtx.destination);
+    o.type = waveform;
+    o.frequency.setValueAtTime(freq0, now);
+    if (freq1) o.frequency.exponentialRampToValueAtTime(freq1, now + dur);
+    g.gain.setValueAtTime(gainPeak, now);
+    g.gain.exponentialRampToValueAtTime(0.001, now + dur);
+    o.start(now); o.stop(now + dur + 0.01);
+  };
+  if      (type==='eat')      mk(null, 300, 1200, 0.12, 0.15);
+  else if (type==='gameover') mk(null, 180, 40,   0.45, 0.25, 'sawtooth');
+  else if (type==='pause')    { mk(null,440,null,0.12,0.1); setTimeout(()=>mk(null,330,null,0.12,0.1),80); }
+  else if (type==='resume')   { mk(null,330,null,0.12,0.1); setTimeout(()=>mk(null,440,null,0.12,0.1),80); }
+  else if (type==='star')     { [523,659,784,1047].forEach((f,i)=>setTimeout(()=>mk(null,f,null,0.15,0.1,'triangle'),i*50)); }
+  else if (type==='achieve')  { [600,900,1200].forEach((f,i)=>setTimeout(()=>mk(null,f,null,0.1,0.08,'triangle'),i*60)); }
+}
+
+// ─────────────────────────────────────────────
+//  APPLY SETTINGS
+// ─────────────────────────────────────────────
+function applySettings() {
+  state.difficulty = document.getElementById('select-speed').value;
+  state.currentSpeed = SPEEDS[state.difficulty] || 130;
+  switch(document.getElementById('select-food').value) {
+    case 'broccoli':   FOOD = { emoji: '🥦' }; break;
+    case 'watermelon': FOOD = { emoji: '🍉' }; break;
+    case 'bowl':       FOOD = { emoji: '🥣' }; break;
+    default:           FOOD = { emoji: '🍎' };
+  }
+  switch(document.getElementById('select-skin').value) {
+    case 'neon':   SKIN = { head:'#00A8cc', body:'#00c4cc', tail:'#a6e3e9' }; break;
+    case 'sunset': SKIN = { head:'#d94556', body:'#ff6f5e', tail:'#f8b595' }; break;
+    case 'royal':  SKIN = { head:'#4a0e4e', body:'#7f287e', tail:'#b762b7' }; break;
+    default:       SKIN = { head:'#16705A', body:'#3FAE7B', tail:'#9FE1CB' };
+  }
+  WALLS_ON = document.getElementById('select-walls').value === 'on';
+}
+
+// ─────────────────────────────────────────────
+//  HELPERS
+// ─────────────────────────────────────────────
+function randCell(exclude=[]) {
+  let pos;
+  do { pos = { x: Math.floor(Math.random()*COLS), y: Math.floor(Math.random()*ROWS) }; }
+  while (exclude.some(c=>c.x===pos.x&&c.y===pos.y));
+  return pos;
+}
+function occupiedCells() {
+  const c=[...state.snake];
+  if(state.food) c.push(state.food);
+  if(state.bonus) c.push(state.bonus);
+  state.obstacles.forEach(o=>c.push(o));
+  return c;
+}
+function generateObstacles() {
+  const obs=[];
+  for(let i=0;i<4;i++) obs.push(randCell(state.snake));
+  return obs;
+}
+function formatTime(s) {
+  return [Math.floor(s/60),s%60].map(v=>String(v).padStart(2,'0')).join(':');
+}
+
+// ─────────────────────────────────────────────
+//  ACHIEVEMENTS ENGINE
+// ─────────────────────────────────────────────
+function checkAchievements() {
+  ACHIEVEMENTS.forEach(a => {
+    // Skip if already unlocked in any previous run
+    if (allTimeUnlocked.has(a.id)) return;
+    if (a.check(state)) {
+      allTimeUnlocked.add(a.id);
+      sessionAchieved.add(a.id);
+      showToast(a);
+    }
+  });
+}
+
+function showToast(ach) {
+  playTone('achieve');
+  const container = document.getElementById('toast-container');
+  const el = document.createElement('div');
+  el.className = 'ach-toast';
+  el.innerHTML = `
+    <div class="toast-icon">${ach.icon}</div>
+    <div class="toast-text">
+      <div class="toast-label">🏆 Achievement Unlocked</div>
+      <div class="toast-name">${ach.name}</div>
+      <div class="toast-desc">${ach.desc}</div>
+    </div>`;
+  container.appendChild(el);
+  setTimeout(() => {
+    el.classList.add('out');
+    setTimeout(() => el.remove(), 350);
+  }, 2800);
+}
+
+// ─────────────────────────────────────────────
+//  DRAW HELPERS
+// ─────────────────────────────────────────────
+function roundRect(x,y,w,h,r) {
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.lineTo(x+w-r,y); ctx.arcTo(x+w,y,x+w,y+r,r);
+  ctx.lineTo(x+w,y+h-r); ctx.arcTo(x+w,y+h,x+w-r,y+h,r);
+  ctx.lineTo(x+r,y+h); ctx.arcTo(x,y+h,x,y+h-r,r);
+  ctx.lineTo(x,y+r); ctx.arcTo(x,y,x+r,y,r);
+  ctx.closePath();
+}
+function lerp(a,b,t) { return a + (b-a)*t; }
+
+function lerpCell(from, to, t, wallWrap) {
+  if (!from) return to;
+  // Handle wrap-around: pick shortest path
+  let dx = to.x - from.x, dy = to.y - from.y;
+  if (!wallWrap) {
+    if (dx > COLS/2) dx -= COLS;
+    if (dx < -COLS/2) dx += COLS;
+    if (dy > ROWS/2) dy -= ROWS;
+    if (dy < -ROWS/2) dy += ROWS;
+  }
+  return { x: from.x + dx*t, y: from.y + dy*t };
+}
+
+function drawSnakeEye(headPx, headPy, dirX, dirY) {
+  const size = CELL/8;
+  const ox = dirX===0 ? CELL/3 : (dirX>0 ? CELL*0.65 : CELL*0.35);
+  const oy = dirY===0 ? CELL/3 : (dirY>0 ? CELL*0.65 : CELL*0.35);
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.arc(headPx+ox, headPy+oy, size, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#000';
+  ctx.beginPath(); ctx.arc(headPx+ox+dirX*size*0.3, headPy+oy+dirY*size*0.3, size*0.45, 0, Math.PI*2); ctx.fill();
+}
+
+function drawSegment(gx, gy, index, total) {
+  const sSize = CELL-2;
+  const taper = total>1 ? 1-(index/(total-1))*0.22 : 1;
+  const w = sSize*taper, h = sSize*taper;
+  const px = gx*CELL + 1 + (sSize-w)/2;
+  const py = gy*CELL + 1 + (sSize-h)/2;
+  const radius = index===0 ? 8 : 5;
+  const gradient = ctx.createLinearGradient(px, py, px+w, py+h);
+  if (index===0) { gradient.addColorStop(0,SKIN.head); gradient.addColorStop(1,SKIN.body); }
+  else           { gradient.addColorStop(0,SKIN.body); gradient.addColorStop(1,SKIN.tail); }
+  ctx.save();
+  ctx.fillStyle = gradient;
+  roundRect(px, py, w, h, radius);
+  ctx.fill();
+  ctx.restore();
+  if (index===0) drawSnakeEye(px, py, state.dir.x, state.dir.y);
+}
+
+function drawGrassBlade(cx,cy) {
+  ctx.strokeStyle='#99c844'; ctx.lineWidth=1.5;
+  ctx.beginPath();
+  ctx.moveTo(cx+CELL*0.3,cy+CELL*0.8); ctx.lineTo(cx+CELL*0.25,cy+CELL*0.4);
+  ctx.moveTo(cx+CELL*0.6,cy+CELL*0.9); ctx.lineTo(cx+CELL*0.65,cy+CELL*0.3);
+  ctx.moveTo(cx+CELL*0.45,cy+CELL*0.85); ctx.lineTo(cx+CELL*0.5,cy+CELL*0.5);
+  ctx.stroke();
+}
+function drawWallBorder() {
+  if (!WALLS_ON) return;
+  ctx.save();
+  ctx.strokeStyle='#5d4037'; ctx.lineWidth=6;
+  ctx.shadowColor='#3e2723'; ctx.shadowBlur=8;
+  ctx.strokeRect(3,3,canvas.width-6,canvas.height-6);
+  ctx.strokeStyle='rgba(255,255,255,0.12)'; ctx.lineWidth=2; ctx.shadowBlur=0;
+  ctx.strokeRect(7,7,canvas.width-14,canvas.height-14);
+  ctx.restore();
+}
+
+// ─────────────────────────────────────────────
+//  DRAW (SMOOTH)
+//  t = interpolation factor [0..1] between prev and current snake positions
+// ─────────────────────────────────────────────
+function draw(t) {
+  ctx.fillStyle = '#aad751';
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+  for (let r=0;r<ROWS;r++)
+    for (let c=0;c<COLS;c++)
+      if ((r*c+r+c)%3===0) drawGrassBlade(c*CELL,r*CELL);
+  drawWallBorder();
+
+  // Obstacles
+  state.obstacles.forEach(obs => {
+    ctx.save();
+    ctx.fillStyle='#795548';
+    roundRect(obs.x*CELL+2,obs.y*CELL+2,CELL-4,CELL-4,6);
+    ctx.fill();
+    ctx.strokeStyle='#5d4037'; ctx.lineWidth=1; ctx.stroke();
+    ctx.restore();
+  });
+
+  // Interpolated snake
+  const total = state.snake.length;
+  for (let i=0; i<total; i++) {
+    const cur  = state.snake[i];
+    const prev = (state.prevSnake && i < state.prevSnake.length) ? state.prevSnake[i] : cur;
+    const gx = lerp(prev.x, cur.x, t);
+    const gy = lerp(prev.y, cur.y, t);
+
+    // Handle wrap-around visually (skip if jumped far)
+    const jumped = Math.abs(cur.x-prev.x) > 2 || Math.abs(cur.y-prev.y) > 2;
+    const renderX = jumped ? cur.x : gx;
+    const renderY = jumped ? cur.y : gy;
+
+    drawSegment(renderX, renderY, i, total);
+  }
+
+  // Food (subtle float animation)
+  if (state.food) {
+    const floatY = Math.sin(Date.now()/400) * 1.5;
+    ctx.save();
+    ctx.font=`${Math.floor(CELL*0.75)}px Arial`;
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(FOOD.emoji, state.food.x*CELL+CELL/2, state.food.y*CELL+CELL/2+floatY);
+    ctx.restore();
+  }
+
+  // Bonus star (spin scale pulse)
+  if (state.bonus) {
+    const pulse = 1 + Math.sin(Date.now()/180)*0.1;
+    const angle = (Date.now()/600) % (Math.PI*2);
+    ctx.save();
+    ctx.translate(state.bonus.x*CELL+CELL/2, state.bonus.y*CELL+CELL/2);
+    ctx.rotate(angle);
+    ctx.scale(pulse,pulse);
+    ctx.font=`${Math.floor(CELL*0.72)}px Arial`;
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('⭐',0,0);
+    ctx.restore();
+  }
+}
+
+// ─────────────────────────────────────────────
+//  GAME LOGIC STEP
+// ─────────────────────────────────────────────
+function handleDirectionChange(newDir) {
+  if (newDir.x !== -state.dir.x || newDir.y !== -state.dir.y) state.nextDir = newDir;
+}
+
+function step() {
+  // Snapshot previous positions for interpolation
+  state.prevSnake = state.snake.map(s=>({...s}));
+  state.prevDir   = { ...state.dir };
+
+  state.dir = state.nextDir;
+  let nextX = state.snake[0].x + state.dir.x;
+  let nextY = state.snake[0].y + state.dir.y;
+
+  if (WALLS_ON) {
+    if (nextX<0||nextX>=COLS||nextY<0||nextY>=ROWS) { gameOver(); return; }
+  } else {
+    nextX = (nextX+COLS)%COLS;
+    nextY = (nextY+ROWS)%ROWS;
+  }
+
+  const head = { x:nextX, y:nextY };
+  if (state.snake.some(s=>s.x===head.x&&s.y===head.y) ||
+      state.obstacles.some(o=>o.x===head.x&&o.y===head.y)) { gameOver(); return; }
+
+  state.snake.unshift(head);
+
+  if (head.x===state.food.x && head.y===state.food.y) {
+    playTone('eat');
+    state.score += 10;
+    state.foodEaten++;
+    document.getElementById('score').textContent = state.score;
+    if (state.score > state.best) {
+      state.best = state.score;
+      state.newBestThisRun = true;
+      document.getElementById('best').textContent = state.best;
+    }
+    if (!state.bonus && Math.random()<0.3) {
+      state.bonus = randCell([...state.snake, state.food, ...state.obstacles]);
+      state.bonusTimer = 50;
+    }
+    state.food = randCell(occupiedCells());
+  } else {
+    state.snake.pop();
+  }
+
+  if (state.bonus) {
+    state.bonusTimer--;
+    if (head.x===state.bonus.x && head.y===state.bonus.y) {
+      playTone('star');
+      state.score += 25;
+      state.starsEaten++;
+      document.getElementById('score').textContent = state.score;
+      if (state.score > state.best) {
+        state.best = state.score;
+        state.newBestThisRun = true;
+        document.getElementById('best').textContent = state.best;
+      }
+      state.bonus = null;
+    } else if (state.bonusTimer<=0) {
+      state.bonus = null;
+    }
+  }
+
+  checkAchievements();
+}
+
+// ─────────────────────────────────────────────
+//  ANIMATION LOOP  (requestAnimationFrame)
+// ─────────────────────────────────────────────
+function animLoop(now) {
+  if (!state.running || state.paused) return;
+  state.rafId = requestAnimationFrame(animLoop);
+
+  // How far are we between the last step and the next?
+  const elapsed = now - state.lastStepMs;
+  let t = Math.min(elapsed / state.currentSpeed, 1);
+
+  // Ease-in-out for a polished feel
+  t = t < 0.5 ? 2*t*t : -1+(4-2*t)*t;
+
+  // Trigger a logic step once per interval
+  if (elapsed >= state.currentSpeed) {
+    state.lastStepMs = now;
+    step();
+    t = 0;
+    if (!state.running) return; // gameOver may have been called
+  }
+
+  draw(t);
+}
+
+// ─────────────────────────────────────────────
+//  PLAYTIME HUD
+// ─────────────────────────────────────────────
+function updatePlaytimeUI() {
+  if (!state.startTimeMs) return;
+  const elapsed = state.pausedElapsedMs + (Date.now()-state.startTimeMs);
+  state.elapsedSeconds = Math.max(0, Math.floor(elapsed/1000));
+  document.getElementById('time-badge').textContent = `⏱️ ${formatTime(state.elapsedSeconds)}`;
+}
+
+// ─────────────────────────────────────────────
+//  INIT
+// ─────────────────────────────────────────────
+function initGame() {
+  applySettings();
+  state.snake    = [{ x:4,y:8 },{ x:3,y:8 }];
+  state.prevSnake= [{ x:4,y:8 },{ x:3,y:8 }];
+  state.dir      = { x:1,y:0 };
+  state.nextDir  = { x:1,y:0 };
+  state.prevDir  = { x:1,y:0 };
+  state.score    = 0;
+  state.bonus    = null;
+  state.bonusTimer = 0;
+  state.paused   = false;
+  state.pausedElapsedMs = 0;
+  state.foodEaten= 0;
+  state.starsEaten=0;
+  state.elapsedSeconds=0;
+  state.newBestThisRun=false;
+  state.obstacles= generateObstacles();
+  state.food     = randCell(occupiedCells());
+  sessionAchieved.clear();
+  document.getElementById('score').textContent = 0;
+}
+
+// ─────────────────────────────────────────────
+//  PAUSE / RESUME
+// ─────────────────────────────────────────────
+function pauseGame() {
+  if (!state.running||state.paused) return;
+  state.paused = true;
+  state.pauseStartMs = Date.now();
+  cancelAnimationFrame(state.rafId);
+  clearInterval(state.playTimer);
+  document.getElementById('pause-overlay').classList.remove('hidden');
+  document.getElementById('pause-btn').textContent = '▶';
+  playTone('pause');
+}
+function resumeGame() {
+  if (!state.running||!state.paused) return;
+  state.paused = false;
+  state.pausedElapsedMs += Date.now()-state.pauseStartMs;
+  state.startTimeMs = Date.now();
+  document.getElementById('pause-overlay').classList.add('hidden');
+  document.getElementById('pause-btn').textContent = '⏸';
+  playTone('resume');
+  state.lastStepMs = performance.now();
+  state.rafId = requestAnimationFrame(animLoop);
+  state.playTimer = setInterval(updatePlaytimeUI, 1000);
+}
+function togglePause() {
+  if (!state.running) return;
+  if (state.paused) resumeGame(); else pauseGame();
+}
+
+// ─────────────────────────────────────────────
+//  GAME OVER
+// ─────────────────────────────────────────────
+function buildGameOverScreen() {
+  document.getElementById('go-score').textContent = state.score;
+  document.getElementById('go-best').textContent  = state.best;
+  document.getElementById('go-length').textContent= state.snake.length;
+  document.getElementById('go-time').textContent  = formatTime(state.elapsedSeconds);
+
+  const newBestEl = document.getElementById('go-new-best');
+  if (state.newBestThisRun) newBestEl.classList.add('show');
+  else newBestEl.classList.remove('show');
+
+  // Achievements list
+  const list = document.getElementById('go-ach-list');
+  list.innerHTML = '';
+  const unlocked = ACHIEVEMENTS.filter(a => allTimeUnlocked.has(a.id));
+  if (unlocked.length === 0) {
+    list.innerHTML = '<div class="go-no-ach">No achievements yet — keep playing!</div>';
+  } else {
+    unlocked.forEach(a => {
+      const earnedThisRun = sessionAchieved.has(a.id);
+      const row = document.createElement('div');
+      row.className = 'go-ach-row';
+      row.innerHTML = `
+        <div class="go-ach-icon">${a.icon}</div>
+        <div class="go-ach-info">
+          <div class="go-ach-name">${a.name}</div>
+          <div class="go-ach-desc">${a.desc}</div>
+        </div>
+        ${earnedThisRun ? '<div class="go-ach-new">NEW!</div>' : ''}`;
+      list.appendChild(row);
+    });
+  }
+}
+
+function gameOver() {
+  playTone('gameover');
+  state.running = false; state.paused = false;
+  cancelAnimationFrame(state.rafId);
+  clearInterval(state.playTimer);
+  // Final draw at step=1 (fully arrived)
+  draw(1);
+  document.getElementById('pause-overlay').classList.add('hidden');
+  document.getElementById('pause-btn').classList.add('hidden');
+  buildGameOverScreen();
+  document.getElementById('gameover-overlay').classList.remove('hidden');
+}
+
+// ─────────────────────────────────────────────
+//  START
+// ─────────────────────────────────────────────
+function startGame() {
+  initAudio();
+  cancelAnimationFrame(state.rafId);
+  clearInterval(state.playTimer);
+  initGame();
+  state.running    = true;
+  state.startTimeMs= Date.now();
+  state.lastStepMs = performance.now();
+
+  document.getElementById('menu-overlay').classList.add('hidden');
+  document.getElementById('gameover-overlay').classList.add('hidden');
+  document.getElementById('pause-overlay').classList.add('hidden');
+  document.getElementById('pause-btn').classList.remove('hidden');
+  document.getElementById('pause-btn').textContent = '⏸';
+  // Clear any lingering toasts
+  document.getElementById('toast-container').innerHTML = '';
+
+  state.rafId    = requestAnimationFrame(animLoop);
+  state.playTimer= setInterval(updatePlaytimeUI, 1000);
+}
+
+function showMenu() {
+  document.getElementById('gameover-overlay').classList.add('hidden');
+  document.getElementById('menu-overlay').classList.remove('hidden');
+  draw(1);
+}
+
+// ─────────────────────────────────────────────
+//  EVENTS
+// ─────────────────────────────────────────────
+document.getElementById('start-btn').addEventListener('click',  startGame);
+document.getElementById('pause-btn').addEventListener('click',  togglePause);
+document.getElementById('resume-btn').addEventListener('click', resumeGame);
+document.getElementById('go-play-btn').addEventListener('click',startGame);
+document.getElementById('go-menu-btn').addEventListener('click',showMenu);
+
+// Keyboard
+const KEY_MAP = {
+  ArrowUp:{x:0,y:-1}, ArrowDown:{x:0,y:1},
+  ArrowLeft:{x:-1,y:0}, ArrowRight:{x:1,y:0},
+  w:{x:0,y:-1}, s:{x:0,y:1}, a:{x:-1,y:0}, d:{x:1,y:0}
+};
+document.addEventListener('keydown', e => {
+  if (e.key==='p'||e.key==='P'||e.key==='Escape') { e.preventDefault(); togglePause(); return; }
+  const dir = KEY_MAP[e.key]; if (!dir) return;
+  e.preventDefault();
+  if (!state.paused) handleDirectionChange(dir);
+});
+
+
+// Swipe
+let tx=0, ty=0;
+window.addEventListener('touchstart', e=>{ tx=e.touches[0].clientX; ty=e.touches[0].clientY; }, { passive:true });
+window.addEventListener('touchmove', e=>{
+  if (!state.running||state.paused) return;
+  const dx=e.touches[0].clientX-tx, dy=e.touches[0].clientY-ty, thr=30;
+  if (Math.abs(dx)>Math.abs(dy)) {
+    if (Math.abs(dx)>thr) { handleDirectionChange(dx>0?{x:1,y:0}:{x:-1,y:0}); tx=e.touches[0].clientX; ty=e.touches[0].clientY; }
+  } else {
+    if (Math.abs(dy)>thr) { handleDirectionChange(dy>0?{x:0,y:1}:{x:0,y:-1}); tx=e.touches[0].clientX; ty=e.touches[0].clientY; }
+  }
+}, { passive:true });
+
+// ─────────────────────────────────────────────
+//  BOOT
+// ─────────────────────────────────────────────
+initGame();
+draw(1);
+</script>
+</body>
+</html>
